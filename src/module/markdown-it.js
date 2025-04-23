@@ -37,35 +37,75 @@ markdownIt
   .use(toc)
   .use(mermaid);
 
-// 添加自定义标签解析插件
-markdownIt.use((md) => {
-  // 保存原始的渲染函数
-  const defaultRender = md.renderer.rules.text || function(tokens, idx, options, env, self) {
-    return self.renderToken(tokens, idx, options);
-  };
+// 创建一个映射表，用于存储已处理的内容片段
+const contentChunks = new Map();
+let chunkCounter = 0;
 
-  // 预处理markdown源文本，直接在源文本层面处理自定义标签
+// 添加自定义标签渐进式解析插件
+markdownIt.use((md) => {
+  // 预处理markdown源文本，处理开始标签和结束标签
   const originalParse = md.parse;
   md.parse = function(src, env) {
-    // 处理自定义标签
+    // 获取所有已注册的自定义标签
     const customTags = getAllCustomTags();
     let modifiedSrc = src;
     
     console.log("处理Markdown文本:", src.substring(0, 100) + "...");
     
-    // 为每个注册的标签创建正则表达式
-    customTags.forEach(tagName => {
-      const tagRegex = new RegExp(`<${tagName}>(.*?)</${tagName}>`, 'gs');
+    for (const tagName of customTags) {
+      // 创建开始和结束标签的正则表达式
+      const startTagRegex = new RegExp(`<${tagName}>`, 'g');
+      const endTagRegex = new RegExp(`</${tagName}>`, 'g');
+      const fullTagRegex = new RegExp(`<${tagName}>(.*?)</${tagName}>`, 'gs');
       
-      modifiedSrc = modifiedSrc.replace(tagRegex, (match, content) => {
-        console.log(`找到${tagName}标签:`, content.substring(0, 30) + "...");
-        return `<div class="custom-tag" data-tag-name="${tagName}" data-tag-content="${encodeURIComponent(content)}"></div>`;
+      // 查找完整的标签对并处理
+      modifiedSrc = modifiedSrc.replace(fullTagRegex, (match, content) => {
+        const chunkId = `custom_tag_${tagName}_${++chunkCounter}`;
+        console.log(`找到完整${tagName}标签:`, content.substring(0, 30) + "...");
+        
+        // 存储内容，以便后续更新
+        contentChunks.set(chunkId, {
+          tagName,
+          content,
+          complete: true,
+          isComplete: true  // 添加isComplete字段，表示标签是否已完成
+        });
+        
+        // 返回唯一标识的div
+        return `<div class="custom-tag" data-tag-id="${chunkId}" data-tag-name="${tagName}" data-tag-complete="true" data-tag-content="${encodeURIComponent(content)}"></div>`;
       });
-    });
+      
+      // 如果仍有未匹配的开始标签，创建占位符
+      let startMatches = [...modifiedSrc.matchAll(startTagRegex)];
+      for (const match of startMatches) {
+        const startIndex = match.index;
+        const chunkId = `custom_tag_${tagName}_${++chunkCounter}`;
+        
+        //获取匹配标签之后的内容
+        const afterContent = modifiedSrc.substring(startIndex + tagName.length + 2);
+        // 存储部分内容
+        contentChunks.set(chunkId, {
+          tagName,
+          content: afterContent,  // 初始为空
+          complete: false,
+          isComplete: false  // 添加isComplete字段，初始为false
+        });
+        
+        // 替换开始标签为占位符
+        modifiedSrc = modifiedSrc.substring(0, startIndex) + 
+          `<div class="custom-tag" data-tag-id="${chunkId}" data-tag-name="${tagName}" data-tag-complete="false"></div>` + 
+          modifiedSrc.substring(startIndex + tagName.length + 2); // +2 for '<>'
+        
+        console.log(`找到开始${tagName}标签，创建占位符: ${chunkId}`);
+      }
+    }
     
     // 调用原始解析函数处理修改后的文本
     return originalParse.call(this, modifiedSrc, env);
   };
 });
+
+// 导出内容块映射，以便在外部访问
+export { contentChunks };
 
 export default markdownIt;

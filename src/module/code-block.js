@@ -18,6 +18,7 @@ import c from "highlight.js/lib/languages/c";
 import ClipboardJS from "clipboard";
 import { createApp, h } from "vue";
 import { getComponentForTag } from "./custom-tags";
+import { contentChunks } from "./markdown-it";
 
 hljs.registerLanguage("javascript", javascript);
 hljs.registerLanguage("vbscript", vbscript);
@@ -35,6 +36,9 @@ hljs.registerLanguage("cpp", cpp);
 hljs.registerLanguage("c", c);
 
 hljs.configure({ ignoreUnescapedHTML: true });
+
+// 存储已创建的组件实例
+const mountedComponents = new Map();
 
 /**
  * 高亮代码块
@@ -92,44 +96,107 @@ function processCustomTags(element) {
 
   customTags.forEach((tagElement, index) => {
     try {
-      // 获取自定义标签的名称和内容
+      // 获取标签ID和标签名称
+      const tagId = tagElement.getAttribute("data-tag-id");
       const tagName = tagElement.getAttribute("data-tag-name");
-      const encodedContent = tagElement.getAttribute("data-tag-content");
+      const isComplete = tagElement.getAttribute("data-tag-complete") === "true";
       
-      // 解码内容
-      const tagContent = decodeURIComponent(encodedContent);
+      // 从映射表获取内容
+      const chunkData = contentChunks.get(tagId);
+      if (!chunkData) {
+        console.warn(`未找到标签数据: ${tagId}`);
+        return;
+      }
       
-      console.log(`处理第${index+1}个标签:`, { tagName, contentPreview: tagContent.substring(0, 30) });
+      console.log(`处理标签 ${tagId}:`, { 
+        tagName, 
+        complete: isComplete, 
+        contentPreview: chunkData.content.substring(0, 30) + "..." 
+      });
       
       // 获取对应的组件
       const component = getComponentForTag(tagName);
-      
-      if (component) {
-        console.log(`找到组件:`, tagName);
-        // 创建一个DOM元素作为组件的挂载点
-        const mountElement = document.createElement("div");
-        mountElement.className = `custom-${tagName}-container`;
-        
-        // 替换原始元素
-        tagElement.parentNode.replaceChild(mountElement, tagElement);
-        
-        // 创建Vue应用实例并挂载组件
-        const app = createApp({
-          render() {
-            return h(component, { content: tagContent });
-          }
-        });
-        
-        // 挂载组件
-        app.mount(mountElement);
-        console.log(`组件挂载成功:`, tagName);
-      } else {
-        console.warn(`未找到组件:`, tagName);
+      if (!component) {
+        console.warn(`未找到组件: ${tagName}`);
+        return;
       }
+      
+      // 检查是否已经挂载了组件
+      const existingApp = mountedComponents.get(tagId);
+      if (existingApp) {
+        // 组件已存在，更新内容和完成状态
+        console.log(`更新组件内容: ${tagId}`);
+        existingApp.component.content = chunkData.content;
+        existingApp.component.isComplete = chunkData.complete;
+        return;
+      }
+      
+      // 创建新组件
+      console.log(`创建新组件: ${tagId}`);
+      
+      // 创建一个DOM元素作为组件的挂载点
+      const mountElement = document.createElement("div");
+      mountElement.className = `custom-${tagName}-container`;
+      
+      // 替换原始元素
+      tagElement.parentNode.replaceChild(mountElement, tagElement);
+      
+      // 创建响应式数据对象
+      const componentData = {
+        content: chunkData.content,
+        isComplete: chunkData.complete
+      };
+      
+      // 创建Vue应用实例并挂载组件
+      const app = createApp({
+        data() {
+          return {
+            component: componentData
+          };
+        },
+        render() {
+          return h(component, { 
+            content: this.component.content,
+            isComplete: this.component.isComplete 
+          });
+        }
+      });
+      
+      // 挂载组件并保存实例
+      app.mount(mountElement);
+      mountedComponents.set(tagId, {
+        app,
+        component: componentData
+      });
+      
+      console.log(`组件挂载成功: ${tagId}, 初始完成状态: ${componentData.isComplete}`);
     } catch (error) {
       console.error("处理自定义标签时出错:", error);
     }
   });
+}
+
+/**
+ * 更新自定义标签内容
+ * @param {string} tagId 标签ID
+ * @param {string} content 新内容
+ * @param {boolean} [isComplete=false] 是否已完成
+ */
+export function updateTagContent(tagId, content, isComplete = false) {
+  // 更新内容映射
+  const chunkData = contentChunks.get(tagId);
+  if (chunkData) {
+    chunkData.content = content;
+    chunkData.complete = isComplete;
+    
+    // 更新组件内容
+    const component = mountedComponents.get(tagId);
+    if (component) {
+      component.component.content = content;
+      component.component.isComplete = isComplete;
+      console.log(`动态更新了组件内容: ${tagId}, 完成状态: ${isComplete}`);
+    }
+  }
 }
 
 /** 构建生成中的 markdown 的内容 */
@@ -177,23 +244,23 @@ export function deepCloneAndUpdate(div1, div2) {
       node1.id = node2.id;
     }
 
-    //  3.3 对 style 的更新
-    if (node1.style.cssText !== node2.style.cssText) {
+    // 3.3 对 style 的更新 - 添加空值检查
+    if (node1.style && node2.style && node1.style.cssText !== node2.style.cssText) {
       node1.style.cssText = node2.style.cssText;
     }
 
     // 检查并复制data属性
     if (node2.dataset) {
       for (const key in node2.dataset) {
-        if (node1.dataset[key] !== node2.dataset[key]) {
+        if (node1.dataset && node1.dataset[key] !== node2.dataset[key]) {
           node1.dataset[key] = node2.dataset[key];
         }
       }
     }
 
     // 情况 4：递归对比和更新子节点
-    const children1 = Array.from(node1.childNodes); // node1 的所有子节点
-    const children2 = Array.from(node2.childNodes); // node2 的所有子节点
+    const children1 = Array.from(node1.childNodes || []); // node1 的所有子节点
+    const children2 = Array.from(node2.childNodes || []); // node2 的所有子节点
 
     // 遍历 node2 的子节点，逐个与 node1 的对应子节点比较
     children2.forEach((child2, index) => {
@@ -211,11 +278,23 @@ export function deepCloneAndUpdate(div1, div2) {
     // 删除 node1 中多余的子节点
     if (children1.length > children2.length) {
       for (let i = children2.length; i < children1.length; i++) {
-        node1.removeChild(children1[i]);
+        if (children1[i] && children1[i].parentNode === node1) {
+          node1.removeChild(children1[i]);
+        }
       }
     }
   }
 
+  // 防止空值错误
+  if (!div1 || !div2) {
+    console.warn("deepCloneAndUpdate 传入了空的节点");
+    return;
+  }
+
   // 从 div2 根节点开始与 div1 比较
-  compareAndUpdate(div1, div2);
+  try {
+    compareAndUpdate(div1, div2);
+  } catch (error) {
+    console.error("更新DOM时出错:", error);
+  }
 }
