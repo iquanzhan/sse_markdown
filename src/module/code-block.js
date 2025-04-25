@@ -18,7 +18,6 @@ import c from "highlight.js/lib/languages/c";
 import ClipboardJS from "clipboard";
 import { createApp, h } from "vue";
 import { getComponentForTag } from "./custom-tags";
-import { contentChunks } from "./markdown-it";
 
 hljs.registerLanguage("javascript", javascript);
 hljs.registerLanguage("vbscript", vbscript);
@@ -36,9 +35,6 @@ hljs.registerLanguage("cpp", cpp);
 hljs.registerLanguage("c", c);
 
 hljs.configure({ ignoreUnescapedHTML: true });
-
-// 存储已创建的组件实例
-const mountedComponents = new Map();
 
 /**
  * 高亮代码块
@@ -63,7 +59,10 @@ function buildCopyButton(element) {
     var t = $(this).children("code").text();
 
     // 创建按钮
-    var btn = $('<span class="copy">复制</span>').attr("data-clipboard-text", t);
+    var btn = $('<span class="copy">复制</span>').attr(
+      "data-clipboard-text",
+      t
+    );
 
     $(this).prepend(btn);
 
@@ -84,14 +83,14 @@ function buildCopyButton(element) {
  * 处理自定义标签
  * @param {Element} element 包含自定义标签的元素
  */
-function processCustomTags(element) {
+export function processCustomTags(element) {
   // 增加调试信息
   console.log("开始处理自定义标签...");
-  
+
   // 查找具有自定义标签类的所有元素
   const customTags = element.querySelectorAll(".custom-tag");
   console.log("找到自定义标签数量:", customTags.length);
-  
+
   if (!customTags.length) return;
 
   customTags.forEach((tagElement, index) => {
@@ -99,111 +98,64 @@ function processCustomTags(element) {
       // 获取标签ID和标签名称
       const tagId = tagElement.getAttribute("data-tag-id");
       const tagName = tagElement.getAttribute("data-tag-name");
-      const isComplete = tagElement.getAttribute("data-tag-complete") === "true";
+      const isComplete =
+        tagElement.getAttribute("data-tag-complete") === "true";
+      // 获取内容
+      const chunkData = decodeURIComponent(tagElement.getAttribute("data-tag-content"));
       
-      // 从映射表获取内容
-      const chunkData = contentChunks.get(tagId);
-      if (!chunkData) {
-        console.warn(`未找到标签数据: ${tagId}`);
-        return;
-      }
-      
-      console.log(`处理标签 ${tagId}:`, { 
-        tagName, 
-        complete: isComplete, 
-        contentPreview: chunkData.content.substring(0, 30) + "..." 
+      console.log(`处理标签 ${tagId}:`, {
+        tagName,
+        complete: isComplete,
+        contentPreview: chunkData,
       });
-      
+
       // 获取对应的组件
       const component = getComponentForTag(tagName);
       if (!component) {
         console.warn(`未找到组件: ${tagName}`);
         return;
       }
-      
-      // 检查是否已经挂载了组件
-      const existingApp = mountedComponents.get(tagId);
-      if (existingApp) {
-        // 组件已存在，更新内容和完成状态
-        console.log(`更新组件内容: ${tagId}`);
-        existingApp.component.content = chunkData.content;
-        existingApp.component.isComplete = chunkData.complete;
-        return;
-      }
-      
+
       // 创建新组件
       console.log(`创建新组件: ${tagId}`);
-      
-      // 创建一个DOM元素作为组件的挂载点
-      const mountElement = document.createElement("div");
-      mountElement.className = `custom-${tagName}-container`;
-      
-      // 替换原始元素
-      tagElement.parentNode.replaceChild(mountElement, tagElement);
-      
+
       // 创建响应式数据对象
       const componentData = {
-        content: chunkData.content,
-        isComplete: chunkData.complete
+        content: chunkData,
+        isComplete: isComplete,
       };
-      
+
       // 创建Vue应用实例并挂载组件
       const app = createApp({
         data() {
           return {
-            component: componentData
+            component: componentData,
           };
         },
         render() {
-          return h(component, { 
+          return h(component, {
             content: this.component.content,
-            isComplete: this.component.isComplete 
+            isComplete: this.component.isComplete,
           });
-        }
+        },
       });
-      
+
       // 挂载组件并保存实例
-      app.mount(mountElement);
-      mountedComponents.set(tagId, {
-        app,
-        component: componentData
-      });
-      
-      console.log(`组件挂载成功: ${tagId}, 初始完成状态: ${componentData.isComplete}`);
+      app.mount(tagElement);
+
+      console.log(
+        `组件挂载成功: ${tagId}, 初始完成状态: ${componentData.isComplete}`
+      );
     } catch (error) {
       console.error("处理自定义标签时出错:", error);
     }
   });
 }
 
-/**
- * 更新自定义标签内容
- * @param {string} tagId 标签ID
- * @param {string} content 新内容
- * @param {boolean} [isComplete=false] 是否已完成
- */
-export function updateTagContent(tagId, content, isComplete = false) {
-  // 更新内容映射
-  const chunkData = contentChunks.get(tagId);
-  if (chunkData) {
-    chunkData.content = content;
-    chunkData.complete = isComplete;
-    
-    // 更新组件内容
-    const component = mountedComponents.get(tagId);
-    if (component) {
-      component.component.content = content;
-      component.component.isComplete = isComplete;
-      console.log(`动态更新了组件内容: ${tagId}, 完成状态: ${isComplete}`);
-    }
-  }
-}
-
 /** 构建生成中的 markdown 的内容 */
 export function buildCodeBlock(element) {
   highlightCode(element);
   buildCopyButton(element);
-  processCustomTags(element);
 }
 
 /** 核心函数, 对比节点的内容 实现动态更新 markdown 的 div 而不是用 innerHTML 的属性全部刷新 */
@@ -211,7 +163,11 @@ export function deepCloneAndUpdate(div1, div2) {
   // 递归比较和更新 div1 和 div2 的子节点
   function compareAndUpdate(node1, node2) {
     // 情况 1：node1 是文本节点，更新文本内容
-    if (node1 && node1.nodeType === Node.TEXT_NODE && node2.nodeType === Node.TEXT_NODE) {
+    if (
+      node1 &&
+      node1.nodeType === Node.TEXT_NODE &&
+      node2.nodeType === Node.TEXT_NODE
+    ) {
       if (node1.nodeValue !== node2.nodeValue) {
         // 更新文本内容
         node1.nodeValue = node2.nodeValue;
@@ -234,7 +190,10 @@ export function deepCloneAndUpdate(div1, div2) {
     }
 
     // 情况 3：节点的 class 或其他属性更新, 注意对root节点的保护
-    if (node1.className !== "article-content" && node1.className !== node2.className) {
+    if (
+      node1.className !== "article-content" &&
+      node1.className !== node2.className
+    ) {
       // 3.1 更新 className
       node1.className = node2.className;
     }
@@ -245,7 +204,11 @@ export function deepCloneAndUpdate(div1, div2) {
     }
 
     // 3.3 对 style 的更新 - 添加空值检查
-    if (node1.style && node2.style && node1.style.cssText !== node2.style.cssText) {
+    if (
+      node1.style &&
+      node2.style &&
+      node1.style.cssText !== node2.style.cssText
+    ) {
       node1.style.cssText = node2.style.cssText;
     }
 

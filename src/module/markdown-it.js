@@ -37,8 +37,6 @@ markdownIt
   .use(toc)
   .use(mermaid);
 
-// 创建一个映射表，用于存储已处理的内容片段
-const contentChunks = new Map();
 let chunkCounter = 0;
 
 // 添加自定义标签渐进式解析插件
@@ -55,21 +53,12 @@ markdownIt.use((md) => {
     for (const tagName of customTags) {
       // 创建开始和结束标签的正则表达式
       const startTagRegex = new RegExp(`<${tagName}>`, 'g');
-      const endTagRegex = new RegExp(`</${tagName}>`, 'g');
       const fullTagRegex = new RegExp(`<${tagName}>(.*?)</${tagName}>`, 'gs');
       
       // 查找完整的标签对并处理
       modifiedSrc = modifiedSrc.replace(fullTagRegex, (match, content) => {
         const chunkId = `custom_tag_${tagName}_${++chunkCounter}`;
         console.log(`找到完整${tagName}标签:`, content.substring(0, 30) + "...");
-        
-        // 存储内容，以便后续更新
-        contentChunks.set(chunkId, {
-          tagName,
-          content,
-          complete: true,
-          isComplete: true  // 添加isComplete字段，表示标签是否已完成
-        });
         
         // 返回唯一标识的div
         return `<div class="custom-tag" data-tag-id="${chunkId}" data-tag-name="${tagName}" data-tag-complete="true" data-tag-content="${encodeURIComponent(content)}"></div>`;
@@ -83,18 +72,10 @@ markdownIt.use((md) => {
         
         //获取匹配标签之后的内容
         const afterContent = modifiedSrc.substring(startIndex + tagName.length + 2);
-        // 存储部分内容
-        contentChunks.set(chunkId, {
-          tagName,
-          content: afterContent,  // 初始为空
-          complete: false,
-          isComplete: false  // 添加isComplete字段，初始为false
-        });
         
         // 替换开始标签为占位符
         modifiedSrc = modifiedSrc.substring(0, startIndex) + 
-          `<div class="custom-tag" data-tag-id="${chunkId}" data-tag-name="${tagName}" data-tag-complete="false"></div>` + 
-          modifiedSrc.substring(startIndex + tagName.length + 2); // +2 for '<>'
+          `<div class="custom-tag" data-tag-id="${chunkId}" data-tag-name="${tagName}" data-tag-content="${encodeURIComponent(afterContent)}" data-tag-complete="false"></div>`
         
         console.log(`找到开始${tagName}标签，创建占位符: ${chunkId}`);
       }
@@ -104,8 +85,5 @@ markdownIt.use((md) => {
     return originalParse.call(this, modifiedSrc, env);
   };
 });
-
-// 导出内容块映射，以便在外部访问
-export { contentChunks };
 
 export default markdownIt;

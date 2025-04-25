@@ -5,6 +5,7 @@
       <span class="think-title">思考过程</span>
       <span v-if="!isComplete" class="thinking-status">思考中...</span>
     </div>
+    {{ isComplete }}<button @click="click">按钮</button>
     <div class="think-content">
       {{ content }}
     </div>
@@ -14,20 +15,24 @@
   </div>
 </template>
 
-<script>
-export default {
-  name: 'ThinkComponent',
-  props: {
-    content: {
-      type: String,
-      required: true
-    },
-    isComplete: {
-      type: Boolean,
-      default: false
-    }
-  }
-}
+<script lang="ts" setup>
+// 定义组件的属性
+const props = defineProps({
+  // 内容
+  content: {
+    type: String,
+    required: true,
+  },
+  isComplete: {
+    type: Boolean,
+    default: false,
+  },
+});
+
+const click = () => {
+  debugger;
+  alert("click");
+};
 </script>
 
 <style scoped>
@@ -100,13 +105,23 @@ export default {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes blink {
-  0% { opacity: 0.6; }
-  50% { opacity: 1; }
-  100% { opacity: 0.6; }
+  0% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.6;
+  }
 }
-</style> 
+</style>
