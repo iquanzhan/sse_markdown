@@ -13,7 +13,6 @@ const customTags = new Map();
  * @param {Object} component - Vue组件对象或组件配置
  */
 export function registerCustomTag(tagName, component) {
-  console.log(`注册自定义标签: ${tagName}`);
   customTags.set(tagName.toLowerCase(), component);
 }
 
@@ -24,7 +23,6 @@ export function registerCustomTag(tagName, component) {
  */
 export function getComponentForTag(tagName) {
   const component = customTags.get(tagName.toLowerCase()) || null;
-  console.log(`获取组件 ${tagName}: ${component ? '找到' : '未找到'}`);
   return component;
 }
 
@@ -35,7 +33,6 @@ export function getComponentForTag(tagName) {
  */
 export function isCustomTag(tagName) {
   const exists = customTags.has(tagName.toLowerCase());
-  console.log(`检查标签 ${tagName}: ${exists ? '已注册' : '未注册'}`);
   return exists;
 }
 

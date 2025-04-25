@@ -16,7 +16,7 @@ import sql from "highlight.js/lib/languages/sql";
 import cpp from "highlight.js/lib/languages/cpp";
 import c from "highlight.js/lib/languages/c";
 import ClipboardJS from "clipboard";
-import { createApp, h } from "vue";
+import { createApp, h, reactive, nextTick } from "vue";
 import { getComponentForTag } from "./custom-tags";
 
 hljs.registerLanguage("javascript", javascript);
@@ -81,18 +81,17 @@ function buildCopyButton(element) {
 
 // 存储已创建的组件实例
 const mountedComponents = new Map();
+//保存上次更新的内容
+let lastUpdatedContent = "";
+let lastUpdatedIsComplete = false;
 
 /**
  * 处理自定义标签
  * @param {Element} element 包含自定义标签的元素
  */
 export function processCustomTags(element) {
-  // 增加调试信息
-  console.log("开始处理自定义标签...");
-
   // 查找具有自定义标签类的所有元素
   const customTags = element.querySelectorAll(".custom-tag");
-  console.log("找到自定义标签数量:", customTags.length);
 
   if (!customTags.length) return;
 
@@ -108,19 +107,25 @@ export function processCustomTags(element) {
         tagElement.getAttribute("data-tag-content")
       );
 
-      console.log(`处理标签 ${tagId}:`, {
-        tagName,
-        complete: isComplete,
-        contentPreview: chunkData,
-      });
-
       // 检查是否已经挂载了组件
       const existingApp = mountedComponents.get(tagId);
       if (existingApp) {
-        // 组件已存在，更新内容和完成状态
-        console.log(`更新组件内容: ${tagId}`);
-        existingApp.component.content = chunkData;
-        existingApp.component.isComplete = isComplete;
+        //如果上次更新的内容和当前内容相同，则不进行更新
+        if (
+          lastUpdatedContent === chunkData &&
+          lastUpdatedIsComplete === isComplete
+        ) {
+          return;
+        }
+
+        //保存上次更新的内容
+        lastUpdatedContent = chunkData;
+        lastUpdatedIsComplete = isComplete;
+
+        nextTick(() => {
+          existingApp.component.content = chunkData;
+          existingApp.component.isComplete = isComplete;
+        });
         return;
       }
 
@@ -131,21 +136,16 @@ export function processCustomTags(element) {
         return;
       }
 
-      // 创建新组件
-      console.log(`创建新组件: ${tagId}`);
-
       // 创建响应式数据对象
-      const componentData = {
+      const componentData = reactive({
         content: chunkData,
         isComplete: isComplete,
-      };
+      });
 
       // 创建Vue应用实例并挂载组件
       const app = createApp({
-        data() {
-          return {
-            component: componentData,
-          };
+        setup() {
+          return { component: componentData };
         },
         render() {
           return h(component, {
@@ -161,10 +161,6 @@ export function processCustomTags(element) {
         app,
         component: componentData,
       });
-
-      console.log(
-        `组件挂载成功: ${tagId}, 初始完成状态: ${componentData.isComplete}`
-      );
     } catch (error) {
       console.error("处理自定义标签时出错:", error);
     }
@@ -183,8 +179,14 @@ export function deepCloneAndUpdate(div1, div2) {
   function compareAndUpdate(node1, node2) {
     //如果是自定义标签，则不进行更新
     if (node1 && node1.classList && node1.classList.contains("custom-tag")) {
-      node1.setAttribute("data-tag-content", node2.getAttribute("data-tag-content"));
-      node1.setAttribute("data-tag-complete", node2.getAttribute("data-tag-complete"));
+      node1.setAttribute(
+        "data-tag-content",
+        node2.getAttribute("data-tag-content")
+      );
+      node1.setAttribute(
+        "data-tag-complete",
+        node2.getAttribute("data-tag-complete")
+      );
       return;
     }
 

@@ -5,7 +5,8 @@
       <span class="think-title">思考过程</span>
       <span v-if="!isComplete" class="thinking-status">思考中...</span>
     </div>
-    {{ isComplete }}<button @click="click">按钮</button>
+    {{ isComplete }}
+    <button @click="click">按钮</button>
     <div class="think-content">
       {{ content }}
     </div>
@@ -15,7 +16,9 @@
   </div>
 </template>
 
-<script lang="ts" setup>
+<script setup>
+import { watch } from 'vue';
+
 // 定义组件的属性
 const props = defineProps({
   // 内容
@@ -30,9 +33,8 @@ const props = defineProps({
 });
 
 const click = () => {
-  debugger;
-  alert("click");
-};
+  console.log('点击按钮');
+}
 </script>
 
 <style scoped>

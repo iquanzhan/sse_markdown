@@ -48,7 +48,6 @@ markdownIt.use((md) => {
     const customTags = getAllCustomTags();
     let modifiedSrc = src;
 
-    console.log("处理Markdown文本:", src.substring(0, 100) + "...");
 
     for (const tagName of customTags) {
       // 创建开始和结束标签的正则表达式
@@ -64,10 +63,6 @@ markdownIt.use((md) => {
         const fullMatch = match[0];
         
         const chunkId = `custom_tag_${tagName}_${index}`;
-        console.log(
-          `找到完整${tagName}标签:`,
-          content.substring(0, 30) + "..."
-        );
 
         // 使用 substring 和索引进行替换
         const replacement = `<div class="custom-tag" data-tag-id="${chunkId}" data-tag-name="${tagName}" data-tag-complete="true" data-tag-content="${encodeURIComponent(content)}"></div>`;
@@ -92,8 +87,6 @@ markdownIt.use((md) => {
           `<div class="custom-tag" data-tag-id="${chunkId}" data-tag-name="${tagName}" data-tag-content="${encodeURIComponent(
             afterContent
           )}" data-tag-complete="false"></div>`;
-
-        console.log(`找到开始${tagName}标签，创建占位符: ${chunkId}`);
       }
     }
 
