@@ -43,44 +43,60 @@ let chunkCounter = 0;
 markdownIt.use((md) => {
   // 预处理markdown源文本，处理开始标签和结束标签
   const originalParse = md.parse;
-  md.parse = function(src, env) {
+  md.parse = function (src, env) {
     // 获取所有已注册的自定义标签
     const customTags = getAllCustomTags();
     let modifiedSrc = src;
-    
+
     console.log("处理Markdown文本:", src.substring(0, 100) + "...");
-    
+
     for (const tagName of customTags) {
       // 创建开始和结束标签的正则表达式
-      const startTagRegex = new RegExp(`<${tagName}>`, 'g');
-      const fullTagRegex = new RegExp(`<${tagName}>(.*?)</${tagName}>`, 'gs');
-      
+      const startTagRegex = new RegExp(`<${tagName}>`, "g");
+      const fullTagRegex = new RegExp(`<${tagName}>(.*?)</${tagName}>`, "gs");
+
       // 查找完整的标签对并处理
-      modifiedSrc = modifiedSrc.replace(fullTagRegex, (match, content) => {
-        const chunkId = `custom_tag_${tagName}_${++chunkCounter}`;
-        console.log(`找到完整${tagName}标签:`, content.substring(0, 30) + "...");
+      const matches = [...modifiedSrc.matchAll(fullTagRegex)];
+      for (let i = matches.length - 1; i >= 0; i--) {
+        const match = matches[i];
+        const content = match[1];
+        const index = match.index;
+        const fullMatch = match[0];
         
-        // 返回唯一标识的div
-        return `<div class="custom-tag" data-tag-id="${chunkId}" data-tag-name="${tagName}" data-tag-complete="true" data-tag-content="${encodeURIComponent(content)}"></div>`;
-      });
-      
+        const chunkId = `custom_tag_${tagName}_${index}`;
+        console.log(
+          `找到完整${tagName}标签:`,
+          content.substring(0, 30) + "..."
+        );
+
+        // 使用 substring 和索引进行替换
+        const replacement = `<div class="custom-tag" data-tag-id="${chunkId}" data-tag-name="${tagName}" data-tag-complete="true" data-tag-content="${encodeURIComponent(content)}"></div>`;
+        
+        modifiedSrc = modifiedSrc.substring(0, index) + replacement + modifiedSrc.substring(index + fullMatch.length);
+      }
+
       // 如果仍有未匹配的开始标签，创建占位符
       let startMatches = [...modifiedSrc.matchAll(startTagRegex)];
       for (const match of startMatches) {
         const startIndex = match.index;
-        const chunkId = `custom_tag_${tagName}_${++chunkCounter}`;
-        
+        const chunkId = `custom_tag_${tagName}_${startIndex}`;
+
         //获取匹配标签之后的内容
-        const afterContent = modifiedSrc.substring(startIndex + tagName.length + 2);
-        
+        const afterContent = modifiedSrc.substring(
+          startIndex + tagName.length + 2
+        );
+
         // 替换开始标签为占位符
-        modifiedSrc = modifiedSrc.substring(0, startIndex) + 
-          `<div class="custom-tag" data-tag-id="${chunkId}" data-tag-name="${tagName}" data-tag-content="${encodeURIComponent(afterContent)}" data-tag-complete="false"></div>`
-        
+        modifiedSrc =
+          modifiedSrc.substring(0, startIndex) +
+          `<div class="custom-tag" data-tag-id="${chunkId}" data-tag-name="${tagName}" data-tag-content="${encodeURIComponent(
+            afterContent
+          )}" data-tag-complete="false"></div>`;
+
         console.log(`找到开始${tagName}标签，创建占位符: ${chunkId}`);
       }
     }
-    
+
     // 调用原始解析函数处理修改后的文本
     return originalParse.call(this, modifiedSrc, env);
   };

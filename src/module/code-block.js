@@ -79,6 +79,9 @@ function buildCopyButton(element) {
   });
 }
 
+// 存储已创建的组件实例
+const mountedComponents = new Map();
+
 /**
  * 处理自定义标签
  * @param {Element} element 包含自定义标签的元素
@@ -101,13 +104,25 @@ export function processCustomTags(element) {
       const isComplete =
         tagElement.getAttribute("data-tag-complete") === "true";
       // 获取内容
-      const chunkData = decodeURIComponent(tagElement.getAttribute("data-tag-content"));
-      
+      const chunkData = decodeURIComponent(
+        tagElement.getAttribute("data-tag-content")
+      );
+
       console.log(`处理标签 ${tagId}:`, {
         tagName,
         complete: isComplete,
         contentPreview: chunkData,
       });
+
+      // 检查是否已经挂载了组件
+      const existingApp = mountedComponents.get(tagId);
+      if (existingApp) {
+        // 组件已存在，更新内容和完成状态
+        console.log(`更新组件内容: ${tagId}`);
+        existingApp.component.content = chunkData;
+        existingApp.component.isComplete = isComplete;
+        return;
+      }
 
       // 获取对应的组件
       const component = getComponentForTag(tagName);
@@ -142,6 +157,10 @@ export function processCustomTags(element) {
 
       // 挂载组件并保存实例
       app.mount(tagElement);
+      mountedComponents.set(tagId, {
+        app,
+        component: componentData,
+      });
 
       console.log(
         `组件挂载成功: ${tagId}, 初始完成状态: ${componentData.isComplete}`
@@ -162,6 +181,13 @@ export function buildCodeBlock(element) {
 export function deepCloneAndUpdate(div1, div2) {
   // 递归比较和更新 div1 和 div2 的子节点
   function compareAndUpdate(node1, node2) {
+    //如果是自定义标签，则不进行更新
+    if (node1 && node1.classList && node1.classList.contains("custom-tag")) {
+      node1.setAttribute("data-tag-content", node2.getAttribute("data-tag-content"));
+      node1.setAttribute("data-tag-complete", node2.getAttribute("data-tag-complete"));
+      return;
+    }
+
     // 情况 1：node1 是文本节点，更新文本内容
     if (
       node1 &&
